@@ -1,8 +1,8 @@
-package com.lhamaworks.kafkatester.tickerplant.synchronous;
+package com.lhamaworks.ameschot.kafkatester.tickerplant.synchronous;
 
-import com.lhamaworks.kafkatester.tickerplant.kafkasettings.DefaultKafkaSettings;
-import com.lhamaworks.kafkatester.tickerplant.kafkasettings.TickerPlantTopics;
-import com.lhamaworks.kafkatester.tickerplant.market.Trade;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.kafkasettings.DefaultKafkaSettings;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.market.Trade;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.kafkasettings.TickerPlantTopics;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -22,8 +22,7 @@ import java.util.Arrays;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 
-public class SyncSubmitTradeReceiver implements AutoCloseable
-{
+public class SyncSubmitTradeReceiver implements AutoCloseable {
     /*Constants*/
 
     /*Attributes*/
@@ -39,8 +38,7 @@ public class SyncSubmitTradeReceiver implements AutoCloseable
 
 
     /*Constructor*/
-    public SyncSubmitTradeReceiver(String topic, String appID, String groupID)
-    {
+    public SyncSubmitTradeReceiver(String topic, String appID, String groupID) {
         this.topic = topic;
 
         consumerProperties = new DefaultKafkaSettings();
@@ -70,24 +68,21 @@ public class SyncSubmitTradeReceiver implements AutoCloseable
     }
 
     /*Methods*/
-    protected KafkaStreams consume()
-    {
+    protected KafkaStreams consume() {
         //setup consumer
         consumer.subscribe(Arrays.asList(topic));
 
         consumer.seekToBeginning(Arrays.asList());
 
         System.out.println("Started polling: " + topic);
-        while (true)
-        {
+        while (true) {
             //read topic records
             ConsumerRecords<String, Trade> recs = consumer.poll(Duration.of(10000, ChronoUnit.MILLIS));
 
             //add results to map
-            for (ConsumerRecord<String, Trade> cr : recs)
-            {
+            for (ConsumerRecord<String, Trade> cr : recs) {
                 System.out.println("-------------");
-                System.out.println("Receive: "+cr);
+                System.out.println("Receive: " + cr);
 
                 //headers
                 //retrieve the correlation id
@@ -100,15 +95,15 @@ public class SyncSubmitTradeReceiver implements AutoCloseable
 
                 //value
                 Trade trade = cr.value();
-                ProducerRecord<String,Trade> submitTradeMessage = new ProducerRecord<>(trade.symbol.name,trade);
-                System.out.println("Submit: "+submitTradeMessage);
+                ProducerRecord<String, Trade> submitTradeMessage = new ProducerRecord<>(trade.symbol.name, trade);
+                System.out.println("Submit: " + submitTradeMessage);
                 tradeProducer.send(submitTradeMessage);
 
                 //create and send reply message
-                ProducerRecord<String,String> replyMessage = new ProducerRecord<>(replyTopic,cr.key(),"Submitted: "+trade.toString());
-                replyMessage.headers().add(SyncProducer.CORRELATION_ID_HEADER_KEY,correlationID.getBytes(StandardCharsets.UTF_8));
+                ProducerRecord<String, String> replyMessage = new ProducerRecord<>(replyTopic, cr.key(), "Submitted: " + trade.toString());
+                replyMessage.headers().add(SyncProducer.CORRELATION_ID_HEADER_KEY, correlationID.getBytes(StandardCharsets.UTF_8));
 
-                System.out.println("Reply: "+replyMessage);
+                System.out.println("Reply: " + replyMessage);
                 producer.send(replyMessage);
             }
 
@@ -117,44 +112,36 @@ public class SyncSubmitTradeReceiver implements AutoCloseable
         }
     }
 
-    public void startConsumer()
-    {
+    public void startConsumer() {
 
         // attach shutdown handler to catch control-c
         final CountDownLatch latch = new CountDownLatch(1);
-        Runtime.getRuntime().addShutdownHook(new Thread(consumerProperties.getProperty(StreamsConfig.APPLICATION_ID_CONFIG) + "-shutdown-hook")
-        {
+        Runtime.getRuntime().addShutdownHook(new Thread(consumerProperties.getProperty(StreamsConfig.APPLICATION_ID_CONFIG) + "-shutdown-hook") {
             @Override
-            public void run()
-            {
+            public void run() {
                 consumer.close();
                 latch.countDown();
             }
         });
 
-        try
-        {
+        try {
             System.out.println("Started Consumer: " + consumerProperties.getProperty(StreamsConfig.APPLICATION_ID_CONFIG) + " on: " + topic);
             consume();
 
             latch.await();
-        }
-        catch (Throwable e)
-        {
+        } catch (Throwable e) {
             System.exit(1);
         }
     }
 
 
-    public static void main(String[] args) throws Exception
-    {
+    public static void main(String[] args) throws Exception {
         new Thread(new SyncSubmitTradeReceiver(TickerPlantTopics.T_A, "app-test-a-poll-consumer", "group-test-a-poll-consumer")::startConsumer).start();
     }
 
 
     @Override
-    public void close()
-    {
+    public void close() {
         consumer.close();
     }
 }

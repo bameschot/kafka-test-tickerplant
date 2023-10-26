@@ -1,8 +1,8 @@
-package com.lhamaworks.kafkatester.tickerplant.consumers;
+package com.lhamaworks.ameschot.kafkatester.tickerplant.consumers;
 
-import com.lhamaworks.kafkatester.tickerplant.kafkasettings.DefaultKafkaSettings;
-import com.lhamaworks.kafkatester.tickerplant.kafkasettings.TickerPlantTopics;
-import com.lhamaworks.kafkatester.tickerplant.market.Symbols;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.kafkasettings.DefaultKafkaSettings;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.market.Symbols;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.kafkasettings.TickerPlantTopics;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -18,8 +18,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 
-public class SymbolValuePollConsumer implements AutoCloseable
-{
+public class SymbolValuePollConsumer implements AutoCloseable {
     /*Constants*/
 
     /*Attributes*/
@@ -29,8 +28,7 @@ public class SymbolValuePollConsumer implements AutoCloseable
     protected KafkaConsumer<String, Double> consumer;
 
     /*Constructor*/
-    public SymbolValuePollConsumer(String topic, String appID, String groupID)
-    {
+    public SymbolValuePollConsumer(String topic, String appID, String groupID) {
         this.topic = topic;
 
         consumerProperties = new DefaultKafkaSettings();
@@ -44,22 +42,19 @@ public class SymbolValuePollConsumer implements AutoCloseable
 
     /*Methods*/
 
-    protected KafkaStreams consume()
-    {
+    protected KafkaStreams consume() {
         //setup consumer
         consumer.subscribe(Arrays.asList(topic));
 
         consumer.seekToBeginning(Arrays.asList());
 
         System.out.println("Started polling: " + topic);
-        while (true)
-        {
+        while (true) {
             //read topic records
             ConsumerRecords<String, Double> recs = consumer.poll(Duration.of(10000, ChronoUnit.MILLIS));
 
             //add results to map
-            for (ConsumerRecord<String, Double> cr : recs)
-            {
+            for (ConsumerRecord<String, Double> cr : recs) {
                 //System.out.println("CR: "+cr);
                 symbolValueMap.put(Symbols.getSymbol(cr.key()), cr.value());
             }
@@ -69,37 +64,30 @@ public class SymbolValuePollConsumer implements AutoCloseable
         }
     }
 
-    public void startConsumer()
-    {
+    public void startConsumer() {
 
         // attach shutdown handler to catch control-c
         final CountDownLatch latch = new CountDownLatch(1);
-        Runtime.getRuntime().addShutdownHook(new Thread(consumerProperties.getProperty(StreamsConfig.APPLICATION_ID_CONFIG) + "-shutdown-hook")
-        {
+        Runtime.getRuntime().addShutdownHook(new Thread(consumerProperties.getProperty(StreamsConfig.APPLICATION_ID_CONFIG) + "-shutdown-hook") {
             @Override
-            public void run()
-            {
+            public void run() {
                 consumer.close();
                 latch.countDown();
             }
         });
 
-        try
-        {
+        try {
             System.out.println("Started Consumer: " + consumerProperties.getProperty(StreamsConfig.APPLICATION_ID_CONFIG) + " on: " + topic);
             consume();
 
             latch.await();
-        }
-        catch (Throwable e)
-        {
+        } catch (Throwable e) {
             System.exit(1);
         }
     }
 
 
-    public static void main(String[] args) throws Exception
-    {
+    public static void main(String[] args) throws Exception {
         List<SymbolValuePollConsumer> consumers = Arrays.asList(
                 new SymbolValuePollConsumer(TickerPlantTopics.T_SUM_TRADE_WORTH, "app-sum-trade-worth-poll-consumer", "group-sum-trade-worth-poll-consumer"),
                 new SymbolValuePollConsumer(TickerPlantTopics.T_MAX_SYMBOL_PRICE, "app-max-symbol-price-poll-consumer", "group-max-symbol-price-poll-consumer"),
@@ -107,8 +95,7 @@ public class SymbolValuePollConsumer implements AutoCloseable
                 new SymbolValuePollConsumer(TickerPlantTopics.T_SYMBOL_MARKET_CAP, "app-symbol-market-cap-poll-consumer", "group-symbol-market-cap-consumer")
         );
 
-        for (SymbolValuePollConsumer consumer : consumers)
-        {
+        for (SymbolValuePollConsumer consumer : consumers) {
             new Thread(consumer::startConsumer).start();
             Thread.sleep(250);
         }
@@ -116,10 +103,8 @@ public class SymbolValuePollConsumer implements AutoCloseable
         //create and start a thread that prints the contents it a slower pace than each received item
         new Thread(() ->
         {
-            while (true)
-            {
-                for (SymbolValuePollConsumer consumer : consumers)
-                {
+            while (true) {
+                for (SymbolValuePollConsumer consumer : consumers) {
                     //print
                     System.out.println("-------<<" + consumer.topic + ">>---------");
                     consumer.symbolValueMap.forEach((key, value) -> System.out.println(key + " = " + String.format("%.2f", value)));
@@ -130,12 +115,9 @@ public class SymbolValuePollConsumer implements AutoCloseable
                 System.out.println("+++++++++++++++++++++++++++++++++++++++++++++++++++");
 
                 //sleep
-                try
-                {
+                try {
                     Thread.sleep(2000);
-                }
-                catch (InterruptedException e)
-                {
+                } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
@@ -147,8 +129,7 @@ public class SymbolValuePollConsumer implements AutoCloseable
 
 
     @Override
-    public void close()
-    {
+    public void close() {
         consumer.close();
     }
 }

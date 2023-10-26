@@ -1,42 +1,48 @@
-package com.lhamaworks.kafkatester.tickerplant.consumers;
+package com.lhamaworks.ameschot.kafkatester.tickerplant.consumers;
 
-import com.lhamaworks.kafkatester.tickerplant.kafkasettings.DefaultKafkaSettings;
-import com.lhamaworks.kafkatester.tickerplant.kafkasettings.TickerPlantTopics;
-import com.lhamaworks.kafkatester.tickerplant.market.Indexes;
-import com.lhamaworks.kafkatester.tickerplant.market.Symbols;
-import com.lhamaworks.kafkatester.tickerplant.market.Trade;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.kafkasettings.DefaultKafkaSettings;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.market.Indexes;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.market.Symbols;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.market.Trade;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.kafkasettings.TickerPlantTopics;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.streams.*;
-import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.KeyValue;
+import org.apache.kafka.streams.StoreQueryParameters;
+import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.kstream.Named;
+import org.apache.kafka.streams.kstream.Suppressed;
 import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.QueryableStoreTypes;
 import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 
 import java.time.Duration;
-import java.time.temporal.ChronoUnit;
 import java.util.Properties;
 
 
-public class TradeIndexConsumer extends AbstractStreamConsumer
-{
+public class TradeIndexConsumer extends AbstractStreamConsumer {
     /*Constants*/
 
     /*Attributes*/
     String storeName;
     Indexes index;
 
-    ReadOnlyKeyValueStore<String,Double> indexComponentPriceTableStore;
+    ReadOnlyKeyValueStore<String, Double> indexComponentPriceTableStore;
 
     Properties producerProperties;
-    Producer<String,Double> producer;
+    Producer<String, Double> producer;
 
     /*Constructor*/
-    public TradeIndexConsumer(String topic, Indexes index)
-    {
+    public TradeIndexConsumer(String topic, Indexes index) {
         super(topic, "app-trade-index-consumer-" + index.name, "group-trade-index-consumer-" + index.name, Serdes.String(), Serdes.Double());
 
         this.index = index;
@@ -57,24 +63,21 @@ public class TradeIndexConsumer extends AbstractStreamConsumer
     /*Methods*/
 
     @Override
-    protected KafkaStreams buildConsumer()
-    {
+    protected KafkaStreams buildConsumer() {
         final StreamsBuilder builder = new StreamsBuilder();
 
         //get the inbound tradeSource topic
         //https://www.ftserussell.com/education-center/calculating-index-values
         //final KStream<String, Double> tradeSource =
-        KTable<String,Double> indexComponentPriceTable = builder
+        KTable<String, Double> indexComponentPriceTable = builder
                 .stream(topic, Consumed.with(Serdes.String(), new Trade.TradeSerde()))
                 //filter on those trades that are part of the index
                 .filter((s, trade) ->
                 {
                     if (trade == null)
                         return false;
-                    for (Symbols indexComponent : index.constituents)
-                    {
-                        if (trade.symbol == indexComponent)
-                        {
+                    for (Symbols indexComponent : index.constituents) {
+                        if (trade.symbol == indexComponent) {
                             return true;
                         }
                     }
@@ -86,29 +89,28 @@ public class TradeIndexConsumer extends AbstractStreamConsumer
                 //add to the index component price table, ensure the store name is set explicitly
                 .toTable(Named.as(storeName), Materialized.as(storeName))
                 //suppress results for 10 seconds before further processing to emit only one event for each interval
-                .suppress(Suppressed.untilTimeLimit(Duration.ofSeconds(10), null).withName("index-consumer-"+index.name))
+                .suppress(Suppressed.untilTimeLimit(Duration.ofSeconds(10), null).withName("index-consumer-" + index.name))
                 //.suppress(Suppressed.untilTimeLimit(Duration.ZERO, null).withName("index-consumer-"+index.name))
 
                 //.suppress(Suppressed.untilTimeLimit(Duration.of(1, ChronoUnit.SECONDS), null))//Suppressed.BufferConfig.maxBytes(1024*1024).emitEarlyWhenFull()))
 
-        ;
+                ;
 
         //use the updates written to the table to trigger the aggregation of all value columns of all rows in the table
         //using the store, then send the new index price using a producer to the indexes topic
         indexComponentPriceTable.toStream().foreach((s, aDouble) ->
         {
             double total = 0d;
-            for (KeyValueIterator<String,Double> it = indexComponentPriceTableStore.all(); it.hasNext(); )
-            {
-                KeyValue<String,Double> kv = it.next();
-                total+=kv.value;
+            for (KeyValueIterator<String, Double> it = indexComponentPriceTableStore.all(); it.hasNext(); ) {
+                KeyValue<String, Double> kv = it.next();
+                total += kv.value;
                 //System.out.println(kv.key+" = "+kv.value);
             }
 
-            System.out.println("Send index update: "+index.name+": "+total + " -> " + total/index.baseDivisor);
+            System.out.println("Send index update: " + index.name + ": " + total + " -> " + total / index.baseDivisor);
 
-            total/=index.baseDivisor;
-            producer.send(new ProducerRecord<String,Double>(TickerPlantTopics.T_INDEXES,index.name,total));
+            total /= index.baseDivisor;
+            producer.send(new ProducerRecord<String, Double>(TickerPlantTopics.T_INDEXES, index.name, total));
 
         });
 
@@ -123,14 +125,12 @@ public class TradeIndexConsumer extends AbstractStreamConsumer
     }
 
     @Override
-    protected void postStartAction(KafkaStreams streams)
-    {
+    protected void postStartAction(KafkaStreams streams) {
         //get the queryable index component price table used for aggregating all rows in the stream
         indexComponentPriceTableStore = streams.store(StoreQueryParameters.fromNameAndType(storeName, QueryableStoreTypes.keyValueStore()));
     }
 
-    public static void main(String[] args) throws Exception
-    {
+    public static void main(String[] args) throws Exception {
         new Thread(() -> new TradeIndexConsumer(TickerPlantTopics.T_RAW_TRADES, Indexes.THREE_APPLES).startConsumer()).start();
         new Thread(() -> new TradeIndexConsumer(TickerPlantTopics.T_RAW_TRADES, Indexes.FOUR_BEES).startConsumer()).start();
         new Thread(() -> new TradeIndexConsumer(TickerPlantTopics.T_RAW_TRADES, Indexes.FIVE_CARROTS).startConsumer()).start();

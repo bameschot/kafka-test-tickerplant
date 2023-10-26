@@ -1,10 +1,9 @@
-package com.lhamaworks.kafkatester.tickerplant.market;
+package com.lhamaworks.ameschot.kafkatester.tickerplant.market;
 
 import java.util.EnumMap;
 import java.util.Random;
 
-public class TradeGenerator
-{
+public class TradeGenerator {
     /*Constants*/
     private static final TradeGenerator instance = new TradeGenerator();
 
@@ -14,32 +13,27 @@ public class TradeGenerator
     public EnumMap<Symbols, Double> lastTradePrice = new EnumMap<Symbols, Double>(Symbols.class);
 
     /*Constructor*/
-    private TradeGenerator()
-    {
+    private TradeGenerator() {
         //setup the last trade prices with the base values
-        for (Symbols s : Symbols.values())
-        {
+        for (Symbols s : Symbols.values()) {
             lastTradePrice.put(s, s.baseVal);
         }
 
     }
 
     /*Methods*/
-    public static TradeGenerator i()
-    {
+    public static TradeGenerator i() {
         return instance;
     }
 
-    public synchronized Trade generateTrade()
-    {
+    public synchronized Trade generateTrade() {
         //select random symbol
-        Symbols s = Symbols.values()[random.nextInt(Symbols.values().length)%38];
+        Symbols s = Symbols.values()[random.nextInt(Symbols.values().length) % 38];
 
         return generateTrade(s);
     }
 
-    public synchronized Trade generateTrade(Symbols s)
-    {
+    public synchronized Trade generateTrade(Symbols s) {
 
         //get a new price based on the previous price but only allow a maximum change of 12%
         //then calculate the new price and log it again

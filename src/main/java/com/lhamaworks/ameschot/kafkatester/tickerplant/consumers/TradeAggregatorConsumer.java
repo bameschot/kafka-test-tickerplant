@@ -1,21 +1,29 @@
-package com.lhamaworks.kafkatester.tickerplant.consumers;
+package com.lhamaworks.ameschot.kafkatester.tickerplant.consumers;
 
-import com.lhamaworks.kafkatester.tickerplant.kafkasettings.TickerPlantTopics;
-import com.lhamaworks.kafkatester.tickerplant.market.Trade;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.market.Trade;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.kafkasettings.TickerPlantTopics;
 import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.streams.*;
-import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.KeyValue;
+import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.Grouped;
+import org.apache.kafka.streams.kstream.KGroupedStream;
+import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.kstream.Produced;
 
-public class TradeAggregatorConsumer extends AbstractStreamConsumer
-{
+public class TradeAggregatorConsumer extends AbstractStreamConsumer {
     /*Constants*/
 
     /*Attributes*/
 
     /*Constructor*/
-    public TradeAggregatorConsumer(String topic)
-    {
-        super(topic, "app-raw-trade-consumer", "group-raw-trade-consumer",Serdes.String(),new Trade.TradeSerde());
+    public TradeAggregatorConsumer(String topic) {
+        super(topic, "app-raw-trade-consumer", "group-raw-trade-consumer", Serdes.String(), new Trade.TradeSerde());
 
         //posts updates as loose events to the output stream rather than emitting the entire table
         consumerProperties.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, 0);
@@ -25,8 +33,7 @@ public class TradeAggregatorConsumer extends AbstractStreamConsumer
     /*Methods*/
 
     @Override
-    protected KafkaStreams buildConsumer()
-    {
+    protected KafkaStreams buildConsumer() {
         final StreamsBuilder builder = new StreamsBuilder();
 
         //get the inbound tradeSource topic
@@ -34,7 +41,7 @@ public class TradeAggregatorConsumer extends AbstractStreamConsumer
                 .stream(topic, Consumed.with(Serdes.String(), new Trade.TradeSerde()));
 
 
-       //final KTable<String, String> tradeWorthTable = stream.toTable(Materialized.as("stream-converted-to-table"));
+        //final KTable<String, String> tradeWorthTable = stream.toTable(Materialized.as("stream-converted-to-table"));
 
         /*Sums On Totals*/
         //sum the total trade worth (price*volume) per symbol
@@ -77,17 +84,16 @@ public class TradeAggregatorConsumer extends AbstractStreamConsumer
 
 
         KTable<String, Integer> sharesOutstandingKTable = shareSource
-                .peek((s, integer) -> System.out.println("S: "+s+" - "+integer))
-                .toTable(Materialized.with(Serdes.String(),Serdes.Integer()));
+                .peek((s, integer) -> System.out.println("S: " + s + " - " + integer))
+                .toTable(Materialized.with(Serdes.String(), Serdes.Integer()));
 
         //get the trade price and join the current outstanding shares to get the market cap
         tradeSource
-                .map((s, trade) -> KeyValue.pair(trade.symbol.symbol,trade.price))
-                .toTable(Materialized.with(Serdes.String(),Serdes.Double()))
-                .join(sharesOutstandingKTable,(price,shares) -> price*shares)
+                .map((s, trade) -> KeyValue.pair(trade.symbol.symbol, trade.price))
+                .toTable(Materialized.with(Serdes.String(), Serdes.Double()))
+                .join(sharesOutstandingKTable, (price, shares) -> price * shares)
                 .toStream()
-                .to(TickerPlantTopics.T_SYMBOL_MARKET_CAP,Produced.with(Serdes.String(),Serdes.Double()));
-
+                .to(TickerPlantTopics.T_SYMBOL_MARKET_CAP, Produced.with(Serdes.String(), Serdes.Double()));
 
 
 //        sharesOutstandingKTable.join(tradeSource
@@ -106,8 +112,7 @@ public class TradeAggregatorConsumer extends AbstractStreamConsumer
         return new KafkaStreams(topology, consumerProperties);
     }
 
-    public static void main(String[] args) throws Exception
-    {
+    public static void main(String[] args) throws Exception {
         new TradeAggregatorConsumer(TickerPlantTopics.T_RAW_TRADES).startConsumer();
     }
 

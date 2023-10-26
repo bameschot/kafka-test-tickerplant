@@ -1,7 +1,6 @@
-package com.lhamaworks.kafkatester.tickerplant.synchronous;
+package com.lhamaworks.ameschot.kafkatester.tickerplant.synchronous;
 
-import com.lhamaworks.kafkatester.tickerplant.kafkasettings.DefaultKafkaSettings;
-import com.lhamaworks.kafkatester.tickerplant.market.Symbols;
+import com.lhamaworks.ameschot.kafkatester.tickerplant.kafkasettings.DefaultKafkaSettings;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -13,18 +12,28 @@ import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.serialization.Deserializer;
-import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.streams.StreamsConfig;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-public class SyncProducer<SK, SV, RK, RV> implements AutoCloseable
-{
+public class SyncProducer<SK, SV, RK, RV> implements AutoCloseable {
     /*Constants*/
     public static final String CORRELATION_ID_HEADER_KEY = "CorrelationID";
     public static final String REPLY_TOPIC_HEADER_KEY = "ReplyTopic";
@@ -51,8 +60,7 @@ public class SyncProducer<SK, SV, RK, RV> implements AutoCloseable
 
 
     /*Constructor*/
-    public SyncProducer(String topic, String applicationID, String groupID, int timeoutMS, Serializer<? extends SK> sendKeySerializer, Serializer<? extends SV> sendValueSerializer, Deserializer<RK> receiveKeyDeserializer, Deserializer<RV> receiveValueDeserializer)
-    {
+    public SyncProducer(String topic, String applicationID, String groupID, int timeoutMS, Serializer<? extends SK> sendKeySerializer, Serializer<? extends SV> sendValueSerializer, Deserializer<RK> receiveKeyDeserializer, Deserializer<RV> receiveValueDeserializer) {
         //topic and reply topic
         this.topic = topic;
         replyTopic = topic + REPLY_TOPIC_POSTFIX;
@@ -86,11 +94,9 @@ public class SyncProducer<SK, SV, RK, RV> implements AutoCloseable
         //dynamically assign all partitions to this consumer, ignore explicitly the default app id assignment from
         //kafka
         List<PartitionInfo> partitionInfos = consumer.partitionsFor(replyTopic);
-        if (partitionInfos != null)
-        {
+        if (partitionInfos != null) {
             List<TopicPartition> partitions = new ArrayList<>(partitionInfos.size());
-            for (PartitionInfo partition : partitionInfos)
-            {
+            for (PartitionInfo partition : partitionInfos) {
                 partitions.add(new TopicPartition(partition.topic(), partition.partition()));
             }
             consumer.assign(partitions);
@@ -103,16 +109,14 @@ public class SyncProducer<SK, SV, RK, RV> implements AutoCloseable
 
     /*Methods*/
     @Override
-    public void close() throws Exception
-    {
+    public void close() throws Exception {
         isRunning = false;
         producer.close();
 
         isRunning = false;
     }
 
-    public RV send(SK key, SV value) throws InterruptedException, ExecutionException, TimeoutException
-    {
+    public RV send(SK key, SV value) throws InterruptedException, ExecutionException, TimeoutException {
         //get a future from the threadpool
         Future<RV> future = executor.submit(new senderCallable(key, value));
 
@@ -122,24 +126,20 @@ public class SyncProducer<SK, SV, RK, RV> implements AutoCloseable
 
 
     /*Inner Classes*/
-    private class ReceiverRunnable implements Runnable
-    {
+    private class ReceiverRunnable implements Runnable {
         /*Attributes*/
 
         /*Constructor*/
 
         /*Methods*/
         @Override
-        public void run()
-        {
-            while (isRunning)
-            {
+        public void run() {
+            while (isRunning) {
                 //read topic records
                 ConsumerRecords<RK, RV> recs = consumer.poll(Duration.of(10000, ChronoUnit.MILLIS));
 
                 //loop over the records received
-                for (ConsumerRecord<RK, RV> cr : recs)
-                {
+                for (ConsumerRecord<RK, RV> cr : recs) {
                     //retrieve the correlation id
                     Iterable<Header> s = cr.headers().headers(CORRELATION_ID_HEADER_KEY);
                     String correlationID = new String(s.iterator().next().value(), StandardCharsets.UTF_8);
@@ -165,8 +165,7 @@ public class SyncProducer<SK, SV, RK, RV> implements AutoCloseable
 
     }
 
-    private class senderCallable implements Callable<RV>
-    {
+    private class senderCallable implements Callable<RV> {
 
         /*Attributes*/
         private final SK key;
@@ -174,16 +173,14 @@ public class SyncProducer<SK, SV, RK, RV> implements AutoCloseable
 
         /*Constructor*/
 
-        public senderCallable(SK key, SV value)
-        {
+        public senderCallable(SK key, SV value) {
             this.key = key;
             this.value = value;
         }
 
         /*Methods*/
         @Override
-        public RV call() throws Exception
-        {
+        public RV call() throws Exception {
             //generate the correlation id for the message
             String correlationID = UUID.randomUUID().toString();
 
@@ -194,12 +191,11 @@ public class SyncProducer<SK, SV, RK, RV> implements AutoCloseable
             //create the message (with correlationID) and send it
             ProducerRecord<SK, SV> message = new ProducerRecord<>(topic, key, value);
             message.headers().add(CORRELATION_ID_HEADER_KEY, correlationID.getBytes(StandardCharsets.UTF_8));
-            message.headers().add(REPLY_TOPIC_HEADER_KEY,replyTopic.getBytes(StandardCharsets.UTF_8));
+            message.headers().add(REPLY_TOPIC_HEADER_KEY, replyTopic.getBytes(StandardCharsets.UTF_8));
             producer.send(message);
 
             //wait for the latch to return, remove the latch from the map if a timeout occurred
-            if (!latch.await(timeoutMS, TimeUnit.MILLISECONDS))
-            {
+            if (!latch.await(timeoutMS, TimeUnit.MILLISECONDS)) {
                 //remove the latch from the map to prevent leak
                 replyLatchMap.remove(correlationID);
 
