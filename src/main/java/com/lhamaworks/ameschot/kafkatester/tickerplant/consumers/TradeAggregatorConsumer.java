@@ -1,5 +1,6 @@
 package com.lhamaworks.ameschot.kafkatester.tickerplant.consumers;
 
+
 import com.lhamaworks.ameschot.kafkatester.tickerplant.market.Trade;
 import com.lhamaworks.ameschot.kafkatester.tickerplant.kafkasettings.TickerPlantTopics;
 import org.apache.kafka.common.serialization.Serdes;
@@ -27,7 +28,6 @@ public class TradeAggregatorConsumer extends AbstractStreamConsumer {
 
         //posts updates as loose events to the output stream rather than emitting the entire table
         consumerProperties.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, 0);
-
     }
 
     /*Methods*/
@@ -38,15 +38,12 @@ public class TradeAggregatorConsumer extends AbstractStreamConsumer {
 
         //get the inbound tradeSource topic
         final KStream<String, Trade> tradeSource = builder
-                .stream(topic, Consumed.with(Serdes.String(), new Trade.TradeSerde()));
-
-
-        //final KTable<String, String> tradeWorthTable = stream.toTable(Materialized.as("stream-converted-to-table"));
+                .stream(topic, Consumed.with(Serdes.String(), new Trade.TradeSerde()))
+                .peek((s, trade) -> System.out.println("Received: "+s+"/"+trade));
 
         /*Sums On Totals*/
         //sum the total trade worth (price*volume) per symbol
         KStream<String, Double> totalPerSymbolStream = tradeSource.map((s, trade) -> KeyValue.pair(trade.getSymbol().symbol, trade.price * trade.volume))
-                .peek((s, aDouble) -> System.out.println("R: " + s + " = " + String.format("%.2f", aDouble)))
                 .groupByKey(Grouped.with(Serdes.String(), Serdes.Double()))
                 .reduce((c, n) -> c + n)
                 .toStream()

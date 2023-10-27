@@ -31,7 +31,7 @@ public class SyncSubmitTrade {
             try {
                 Random r = new Random();
                 SyncProducer<String, Trade, String, String> syncProducer = new SyncProducer<>(
-                        TickerPlantTopics.T_A,
+                        TickerPlantTopics.T_RAW_TRADES,
                         "sync-test-app-id",
                         "sync-test-group-id",
                         60000,

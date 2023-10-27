@@ -1,6 +1,7 @@
 package com.lhamaworks.ameschot.kafkatester.tickerplant.market;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serdes;
@@ -11,6 +12,9 @@ import java.nio.charset.StandardCharsets;
 public class Trade {
     /*Constants*/
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    static {
+        OBJECT_MAPPER.enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL);
+    }
 
     /*Attributes*/
     public Symbols symbol;
@@ -80,7 +84,8 @@ public class Trade {
         public byte[] serialize(String s, Trade trade) {
             try {
                 return trade.toJson().getBytes(StandardCharsets.UTF_8);
-            } catch (JsonProcessingException e) {
+            } catch (Exception e) {
+                System.out.println(e);
                 return null;
             }
 
@@ -93,6 +98,7 @@ public class Trade {
             try {
                 return Trade.fromJson(new String(bytes, StandardCharsets.UTF_8));
             } catch (JsonProcessingException e) {
+                System.out.println(e);
                 return null;
             }
         }

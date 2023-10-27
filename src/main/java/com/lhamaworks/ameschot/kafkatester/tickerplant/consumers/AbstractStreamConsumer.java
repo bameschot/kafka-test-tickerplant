@@ -37,13 +37,13 @@ public abstract class AbstractStreamConsumer<K, V> {
 
     public void startConsumer() {
         KafkaStreams streams = buildConsumer();
-        streams.cleanUp();
 
         // attach shutdown handler to catch control-c
         final CountDownLatch latch = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(consumerProperties.getProperty(StreamsConfig.APPLICATION_ID_CONFIG) + "-shutdown-hook") {
             @Override
             public void run() {
+                System.out.println("Closed consumer");
                 streams.close();
                 latch.countDown();
             }
@@ -56,6 +56,7 @@ public abstract class AbstractStreamConsumer<K, V> {
 
             latch.await();
         } catch (Throwable e) {
+            System.out.println(e);
             System.exit(1);
         }
     }

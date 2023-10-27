@@ -136,7 +136,7 @@ public class SyncSubmitTradeReceiver implements AutoCloseable {
 
 
     public static void main(String[] args) throws Exception {
-        new Thread(new SyncSubmitTradeReceiver(TickerPlantTopics.T_A, "app-test-a-poll-consumer", "group-test-a-poll-consumer")::startConsumer).start();
+        new Thread(new SyncSubmitTradeReceiver(TickerPlantTopics.T_RAW_TRADES, "app-test-a-poll-consumer", "group-test-a-poll-consumer")::startConsumer).start();
     }
 
 
